@@ -1,0 +1,7 @@
+data
+faiss_index*
+__pycache__
+workshop
+*.pem
+venv
+hidden

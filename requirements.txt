@@ -1,0 +1,17 @@
+faiss-cpu
+transformers
+Pillow
+pypdf
+jq
+langchain
+langchain-community
+streamlit
+botocore
+boto3
+awscli
+anthropic
+python-dotenv
+langchainhub
+sentence-transformers
+wikipedia
+youtube_search
