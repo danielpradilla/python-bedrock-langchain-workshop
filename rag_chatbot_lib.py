@@ -13,6 +13,13 @@ from langchain_community.document_loaders import Docx2txtLoader
 from langchain_community.document_loaders import UnstructuredXMLLoader
 from langchain_community.document_loaders import TextLoader
 
+from langchain.retrievers.multi_query import MultiQueryRetriever
+from langchain.prompts import PromptTemplate
+
+from langchain.retrievers import ContextualCompressionRetriever
+from langchain.retrievers.document_compressors import LLMChainExtractor
+
+
 import common_functions as cf
 
 DEFAULT_DOCUMENTS_PATH = '../datasets/pdf/digital_corpora/3003'
@@ -96,5 +103,67 @@ def get_rag_chat_streaming_response(model_id, input_text, memory, index, streami
     conversation_with_retrieval = ConversationalRetrievalChain.from_llm(llm, index.as_retriever(), memory=memory, return_source_documents=True)
     
     chat_response = conversation_with_retrieval({"question": input_text}) #pass the user message, history, and knowledge to the model
+
+    return chat_response
+
+
+def get_multiquery_rag_chat_streaming_response(model_id, input_text, memory, index, streaming_callback):
+
+    llm = get_llm(model_id, streaming_callback)
+    
+    prompt_template = """You are an AI language model assistant.
+        Your task is to generate 3 different versions of the given user question to retrieve relevant documents from a vector database.
+        By generating multiple perspectives on the user question, your goal is to help the user overcome some of the limitations  of distance-based similarity search.
+        Provide these alternative questions separated by newlines.
+        Original question: {question}
+        """
+    
+    PROMPT = PromptTemplate(
+            template=prompt_template, input_variables=["question"]
+        )
+
+    multiquery_retriever = MultiQueryRetriever.from_llm(llm=llm, retriever=index.as_retriever(), prompt=PROMPT, parser_key="lines") #custom prompt parsing questions in lines
+
+    conversation_with_retrieval = ConversationalRetrievalChain.from_llm(llm=llm, retriever=multiquery_retriever, memory=memory, return_source_documents=True)
+    
+    chat_response = conversation_with_retrieval({"question": input_text}) #pass the user message, history, and knowledge to the model
+
+    return chat_response
+
+
+def get_mmr_rag_chat_streaming_response(model_id, input_text, memory, index, streaming_callback):
+
+    llm = get_llm(model_id, streaming_callback)
+
+    similarity_retriever = index.as_retriever(search_type="similarity", search_kwargs={"k": 8})
+    similarity_docs = similarity_retriever.get_relevant_documents(input_text)
+    mmr_retriever = index.as_retriever(search_type="mmr", search_kwargs={"k": 8})
+    mmr_docs = mmr_retriever.get_relevant_documents(input_text)
+
+    similarity_docs_contents = {getattr(doc, 'page_content') for doc in similarity_docs}
+    mmr_docs_contents = {getattr(doc, 'page_content') for doc in mmr_docs}
+
+    unique_to_mmr = [doc for doc in mmr_docs if getattr(doc, 'page_content') in mmr_docs_contents - similarity_docs_contents]
+    print("unique in mmr:")
+    for doc in unique_to_mmr:
+        print(doc)
+
+    conversation_with_retrieval_mmr = ConversationalRetrievalChain.from_llm(llm, mmr_retriever, memory=memory, return_source_documents=True)
+    
+    chat_response = conversation_with_retrieval_mmr({"question": input_text}) #pass the user message, history, and knowledge to the model
+
+    return chat_response
+
+
+def get_rag_chat_with_contextual_compression_streaming_response(model_id, input_text, memory, index, streaming_callback):
+
+    llm = get_llm(model_id, streaming_callback)
+
+    compressor = LLMChainExtractor.from_llm(llm)
+    compression_retriever = ContextualCompressionRetriever(base_compressor=compressor, base_retriever=index.as_retriever(search_kwargs={"k": 2}))
+
+    conversation_with_compressor_retrieval = ConversationalRetrievalChain.from_llm(llm, compression_retriever, memory=memory, return_source_documents=True)
+    
+    chat_response = conversation_with_compressor_retrieval({"question": input_text}) #pass the user message, history, and knowledge to the model
 
     return chat_response

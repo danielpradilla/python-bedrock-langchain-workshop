@@ -89,16 +89,3 @@ def get_chat_response(model_id, input_text, memory, streaming_callback): #chat c
     
     return chat_response
 
-def get_chat_chat_response(model_id, input_text, memory, streaming_callback): #chat client function
-    
-    llm = get_chat_llm(model_id, streaming_callback)
-    
-    conversation_with_summary = ConversationChain( #create a chat client
-        llm = llm, #using the Bedrock LLM
-        memory = memory, #with the summarization memory
-        verbose = True #print out some of the internal states of the chain while running
-    )
-    
-    chat_response = conversation_with_summary.predict(input=input_text) #pass the user message and summary to the model
-    
-    return chat_response
